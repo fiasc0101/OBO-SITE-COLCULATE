@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Подбор спецификаций — OBO Bettermann</title>
+<style>
+:root{--orange:#F7A21B;--orange-d:#D98700;--black:#1A1A1A;--grey:#F4F4F4;--line:#DDD;--ok:#E3F3E1;--review:#FFF3D1;--acc:#E6F0FA;--dec:#EEEEEE}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;font-size:13px;color:var(--black);background:#fff}
+header{background:var(--black);color:#fff;display:flex;align-items:center;gap:18px;padding:10px 24px;border-bottom:5px solid var(--orange)}
+header img{height:42px;background:#fff;padding:4px 8px;border-radius:4px}
+header .fallback{display:none;font-weight:800;font-size:28px;color:var(--orange);letter-spacing:1px}
+header h1{font-size:18px;font-weight:600;margin:0}
+header small{color:#BBB;display:block;font-weight:400;margin-top:2px}
+main{padding:16px 24px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.box{border:1px solid var(--line);border-top:3px solid var(--orange);border-radius:4px;padding:10px 12px;background:var(--grey);min-width:230px}
+.box h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555}
+.box input[type=file]{max-width:210px;font-size:12px}
+button{background:var(--orange);color:var(--black);border:0;border-radius:3px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px}
+button:hover{background:var(--orange-d)}
+button.sec{background:#fff;border:1px solid var(--black)}
+button.sec:hover{background:var(--black);color:#fff}
+#msg{margin:6px 0 4px;font-weight:600;min-height:18px}
+#base{color:#666;margin-bottom:8px;font-size:12px}
+.legend{display:flex;gap:14px;margin-bottom:8px;font-size:12px;color:#555;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;vertical-align:-2px;border:1px solid #bbb}
+.wrap{overflow:auto;max-height:calc(100vh - 360px);border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--line);padding:4px 7px;vertical-align:top}
+th{background:var(--black);color:#fff;position:sticky;top:0;font-weight:600;z-index:2}
+th.src{border-bottom:3px solid #888}
+th.dst{border-bottom:3px solid var(--orange)}
+tr.ok td{background:var(--ok)}tr.review td{background:var(--review)}tr.none td{background:#fff}tr.decided td{background:var(--dec)}
+tr.none td:first-child{border-left:4px solid #E57373}
+tr.ok td:first-child{border-left:4px solid #66BB6A}
+tr.review td:first-child{border-left:4px solid var(--orange)}
+tr.decided td:first-child{border-left:4px solid #888}
+tr.acc td{background:var(--acc)}
+td[contenteditable]:focus{outline:2px solid var(--orange);background:#fff}
+td.num{white-space:nowrap}small{color:#777}
+select{max-width:320px;font-size:12px}
+.sep{border-left:3px solid var(--orange)!important}
+.dec{font-weight:600;color:#444}
+a.edit{color:#9a5b00;font-size:12px;margin-left:6px;white-space:nowrap}
+</style></head><body>
+<header>
+ <img src="/static/logo.png" alt="OBO Bettermann" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+ <span class="fallback">OBO</span>
+ <h1>Подбор номенклатуры по спецификации<small>PDF · Excel · фото → номенклатура OBO</small></h1>
+</header>
+<main>
+<div class="bar">
+ <div class="box"><h3>1. Спецификация</h3><input type="file" id="spec"> <button onclick="parse()">Разобрать</button></div>
+ <div class="box"><h3>База OBO (Excel)</h3><input type="file" id="cat"> <button class="sec" onclick="up('catalog',cat)">Загрузить</button></div>
+ <div class="box"><h3>Карта замен (Excel)</h3><input type="file" id="map"> <button class="sec" onclick="up('mapping',map)">Загрузить</button> <a href="/api/mapping/export" style="font-size:12px">скачать карту</a></div>
+ <div class="box"><h3>Действия</h3>
+  <button class="sec" onclick="mergeRows()">Объединить одинаковые</button> <button class="sec" onclick="undoMerge()">Отменить</button><br><br>
+  <button onclick="match()">2. Подобрать</button> <button onclick="exp()">3. Скачать Excel</button>
+  <label style="margin-left:8px"><input type="checkbox" id="wp"> цена и сумма</label></div>
+</div>
+<div id="msg"></div><div id="base"></div>
+<div class="legend"><span><i style="background:var(--ok)"></i>подобрано</span><span><i style="background:var(--dec)"></i>решение из карты (аналога нет / в комплекте)</span><span><i style="background:var(--review)"></i>есть варианты, выбрать</span><span><i style="background:#fff;border-left:3px solid #E57373"></i>не подобрано</span><span><i style="background:var(--acc)"></i>крепёж / соединители</span></div>
+<div class="wrap"><table id="t"><thead><tr>
+<th class="src">№</th><th class="src">Наименование</th><th class="src">Артикул</th><th class="src">Ед.</th><th class="src">Кол-во</th>
+<th class="dst sep">Наименование (OBO)</th><th class="dst">Тип (букв.)</th><th class="dst">Артикул (цифр.)</th><th class="dst">Ед.</th><th class="dst">Кол-во</th><th class="dst">Как найдено</th>
+</tr></thead><tbody></tbody></table></div>
+</main>
+<script>
+let items=[],rows=[],backup=null;
+const DECISIONS=['Аналог отсутствует','Идёт в комплекте','Не требуется'];
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const msg=t=>document.getElementById('msg').textContent=t;
+const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+async function counts(){try{const j=await (await fetch('/api/catalog/count')).json();document.getElementById('base').textContent='В базе: позиций OBO — '+j.catalog+', записей в карте замен — '+j.mapping}catch(e){}}
+counts();
+async function parse(){if(!spec.files[0]){msg('Выберите файл спецификации');return}
+ msg('Идёт разбор…');const f=new FormData();f.append('file',spec.files[0]);
+ const r=await fetch('/api/parse',{method:'POST',body:f});const j=await r.json();
+ if(!r.ok){msg(j.detail);return}items=j.items;rows=items.map(s=>({src:s,match:null,decision:'',status:'none',accessories:[],candidates:[]}));msg('Извлечено строк: '+items.length);draw()}
+async function up(kind,inp){if(!inp.files[0]){msg('Выберите файл');return}
+ msg('Загрузка…');const f=new FormData();f.append('file',inp.files[0]);
+ const r=await fetch('/api/'+kind+'/upload',{method:'POST',body:f});const j=await r.json();
+ msg(r.ok?'Загружено: '+j.loaded:(j.detail||'Ошибка'));counts()}
+async function match(){
+ const r=await post('/api/match',{items:rows.map(x=>x.src)});
+ rows=(await r.json()).rows;draw();
+ const ok=rows.filter(x=>x.match).length,dec=rows.filter(x=>x.decision).length;
+ msg(`Подобрано: ${ok} · Решение из карты: ${dec} · Нужно выбрать вручную: ${rows.length-ok-dec} (из ${rows.length})`)}
+async function exp(){const r=await post('/api/export',{rows:rows.map(x=>({...x,candidates:[]})),with_price:wp.checked});
+ const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='result.xlsx';a.click()}
+const nk=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/х/g,'x').replace(/×/g,'x').replace(/\s+/g,' ').trim();
+function mergeRows(){
+ if(!rows.length)return;
+ backup=JSON.parse(JSON.stringify(rows));
+ const map=new Map();
+ rows.forEach(r=>{const s=r.src;const k=nk(s.name)+'|'+nk(s.article).replace(/[\s\-_.\/]/g,'')+'|'+nk(s.unit);
+  if(!map.has(k)){map.set(k,{src:{...s,qty:0,blocks:new Set()},match:null,decision:'',status:'none',accessories:[],candidates:[]})}
+  const m=map.get(k).src;m.qty+=s.qty;if(s.block)m.blocks.add(s.block)});
+ rows=[...map.values()].map((r,i)=>{r.src.qty=Math.round(r.src.qty*1000)/1000;r.src.blocks=[...r.src.blocks].join(', ');r.src.pos=String(i+1);return r});
+ msg('Было строк: '+backup.length+', стало: '+rows.length);draw()}
+function undoMerge(){if(backup){rows=backup;backup=null;msg('Объединение отменено');draw()}}
+async function remember(payload){try{await post('/api/mapping/remember',payload);counts()}catch(e){}}
+async function editRow(i){
+ const r=rows[i];
+ try{const j=await (await post('/api/candidates',{name:r.src.name})).json();r.candidates=j.candidates||[]}catch(e){r.candidates=[]}
+ r.editing=true;draw()}
+async function choose(i,v){
+ const r=rows[i];if(v===''||v==null)return;
+ if(v==='c'){r.editing=false;draw();return}
+ if(v==='f'){
+  await post('/api/mapping/forget',{name:r.src.name,article:r.src.article});
+  const j=await (await post('/api/match',{items:[r.src]})).json();
+  rows[i]=j.rows[0];counts();msg('Запомненное решение удалено. Выберите новый вариант.');draw();return}
+ if(String(v).startsWith('d:')){
+  const d=String(v).slice(2);
+  r.match=null;r.decision=d;r.status='decided';r.how='выбрано вручную';r.editing=false;
+  remember({name:r.src.name,article:r.src.article,decision:d});
+  msg('Запомнено: «'+d+'»');draw();return}
+ const c=r.candidates[+v];if(!c)return;
+ const fac=(r.editing&&r.match)?(r.factor||1):1;
+ r.match={num_article:c.num_article,letter_article:c.letter_article,name:c.name,unit:c.unit,qty:Math.round(r.src.qty*fac*1000)/1000,price:null};
+ r.factor=fac;r.decision='';r.status='ok';r.how='выбрано вручную';r.editing=false;
+ remember({name:r.src.name,article:r.src.article,code:c.num_article,factor:fac});
+ msg('Выбор запомнен — в следующий раз эта позиция подберётся сама');draw()}
+function edit(i,f,v){rows[i].src[f]=f=='qty'?parseFloat(v):v.trim()}
+function selectHtml(i,r){
+ const opts=r.candidates.map((c,k)=>`<option value="${k}">${c.score}% ${esc(c.letter_article)} — ${esc(c.name)}</option>`).join('');
+ const decs=DECISIONS.map(d=>`<option value="d:${d}">${d}</option>`).join('');
+ const extra=r.editing?'<option value="c">↩ оставить как есть</option><option value="f">✖ забыть запомненное</option>':'';
+ return `<select onchange="choose(${i},this.value)"><option value="">— выбрать вариант —</option>${extra}${opts}<optgroup label="Решение">${decs}</optgroup></select>`}
+function draw(){const tb=document.querySelector('#t tbody');tb.innerHTML='';
+ rows.forEach((r,i)=>{const s=r.src,m=r.match;
+  const showSel=r.editing||(!m&&!r.decision);
+  const right=showSel?selectHtml(i,r):(m?esc(m.name):`<span class="dec">${esc(r.decision)}</span>`);
+  const how=(r.status==='none'||r.status==='review')?'':esc(r.how||'');
+  const edit_=(!showSel&&(m||r.decision))?`<a href="#" class="edit" onclick="editRow(${i});return false">изменить</a>`:'';
+  tb.insertAdjacentHTML('beforeend',`<tr class="${r.status}"><td class="num">${esc(s.pos||i+1)}${s.blocks?'<br><small>бл. '+esc(s.blocks)+'</small>':''}</td>
+  <td contenteditable onblur="edit(${i},'name',this.innerText)">${esc(s.name)}</td><td contenteditable onblur="edit(${i},'article',this.innerText)">${esc(s.article)}</td>
+  <td>${esc(s.unit)}</td><td contenteditable onblur="edit(${i},'qty',this.innerText)">${esc(s.qty)}</td>
+  <td class="sep">${right}</td><td>${m?esc(m.letter_article):''}</td><td>${m?esc(m.num_article):''}</td><td>${m?esc(m.unit):''}</td><td>${m?esc(m.qty):''}</td>
+  <td>${how}${edit_}</td></tr>`);
+  (r.accessories||[]).forEach(a=>tb.insertAdjacentHTML('beforeend',`<tr class="acc"><td></td><td colspan=4>↳ крепёж / соединитель${a.note?' ('+esc(a.note)+')':''}</td><td class="sep">${esc(a.name)}</td><td>${esc(a.letter_article)}</td><td>${esc(a.num_article)}</td><td>${esc(a.unit)}</td><td>${esc(a.qty)}</td><td></td></tr>`))})}
+</script></body></html>
